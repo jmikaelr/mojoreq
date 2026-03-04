@@ -1,0 +1,11 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# local secrets
+.env
+.env.*
+!.env.example
+
+# codex/session scratch
+**/codex.txt
