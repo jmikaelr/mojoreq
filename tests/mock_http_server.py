@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import gzip
 import json
+import ssl
 import threading
 import urllib.parse
 import zlib
@@ -11,6 +13,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _ATTEMPTS = defaultdict(int)
 _ATTEMPTS_LOCK = threading.Lock()
+_CONNECTION_IDS = {}
+_NEXT_CONNECTION_ID = 0
+_CONNECTION_LOCK = threading.Lock()
 
 
 def _next_attempt(key: str) -> int:
@@ -40,6 +45,19 @@ class MockHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args):
         _ = (fmt, args)
+
+    def setup(self):
+        super().setup()
+        global _NEXT_CONNECTION_ID
+        socket_key = id(self.connection)
+        with _CONNECTION_LOCK:
+            existing = _CONNECTION_IDS.get(socket_key)
+            if existing is None:
+                _NEXT_CONNECTION_ID += 1
+                existing = _NEXT_CONNECTION_ID
+                _CONNECTION_IDS[socket_key] = existing
+        self._connection_id = existing
+        self._connection_request_count = 0
 
     def _read_body(self) -> bytes:
         raw_length = self.headers.get("Content-Length", "0")
@@ -108,12 +126,39 @@ class MockHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _handle(self, method: str):
+        self._connection_request_count += 1
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         path = parsed.path
 
         if path == "/healthz":
             self._send_text(200, "ok")
+            return
+
+        if path == "/pool-probe":
+            request_connection = self.headers.get("Connection", "").lower()
+            keep_alive = "close" not in request_connection
+            payload = json.dumps(
+                {
+                    "connection_id": self._connection_id,
+                    "connection_request_count": self._connection_request_count,
+                    "ok": True,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Connection", "keep-alive" if keep_alive else "close")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("X-Connection-Id", str(self._connection_id))
+            self.send_header(
+                "X-Connection-Request", str(self._connection_request_count)
+            )
+            self.end_headers()
+            self.wfile.write(payload)
+            if not keep_alive:
+                self.close_connection = True
             return
 
         if path == "/ok":
@@ -163,6 +208,18 @@ class MockHandler(BaseHTTPRequestHandler):
                 compressed,
                 headers={"Content-Type": "application/json"},
                 content_encoding="deflate",
+            )
+            return
+
+        if path == "/brotli":
+            compressed = base64.b64decode(
+                "Dw6AeyJjb21wcmVzc2VkIjoiYnIiLCJvayI6dHJ1ZX0D"
+            )
+            self._send_body(
+                200,
+                compressed,
+                headers={"Content-Type": "application/json"},
+                content_encoding="br",
             )
             return
 
@@ -238,11 +295,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=18080, type=int)
+    parser.add_argument("--tls-cert", default="")
+    parser.add_argument("--tls-key", default="")
     args = parser.parse_args()
 
     server = ThreadingHTTPServer((args.host, args.port), MockHandler)
+    scheme = "http"
+    if len(args.tls_cert) > 0 or len(args.tls_key) > 0:
+        if len(args.tls_cert) == 0 or len(args.tls_key) == 0:
+            raise SystemExit("both --tls-cert and --tls-key are required")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile=args.tls_cert, keyfile=args.tls_key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
+
     print(
-        f"mock_http_server listening on http://{args.host}:{args.port}",
+        f"mock_http_server listening on {scheme}://{args.host}:{args.port}",
         flush=True,
     )
     try:

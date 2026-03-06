@@ -109,7 +109,14 @@ fn test_build_request_payload_adds_defaults() raises:
     assert_true(payload.startswith("GET /hello HTTP/1.1\r\n"))
     assert_true(payload.find("\r\nHost: example.com\r\n") != -1)
     assert_true(payload.find("\r\nConnection: close\r\n") != -1)
-    assert_true(payload.find("\r\nAccept-Encoding: gzip, deflate\r\n") != -1)
+    if requests._brotli_available():
+        assert_true(
+            payload.find("\r\nAccept-Encoding: gzip, deflate, br\r\n") != -1
+        )
+    else:
+        assert_true(
+            payload.find("\r\nAccept-Encoding: gzip, deflate\r\n") != -1
+        )
     assert_true(payload.endswith("\r\n\r\n"))
 
 
@@ -225,9 +232,18 @@ fn test_decode_content_encoding_deflate_raw_fallback() raises:
     assert_equal(decoded, "hello compressed world")
 
 
+fn test_decode_content_encoding_brotli() raises:
+    if not requests._brotli_available():
+        return
+
+    var brotli_body = b64decode("HxUA+AU2xtb1j4RGUG0CT5HAUet2gs4A")
+    var decoded = requests._decode_content_encoding(brotli_body, "br")
+    assert_equal(decoded, "hello compressed world")
+
+
 fn test_decode_content_encoding_unsupported_raises() raises:
     with assert_raises(contains="unsupported Content-Encoding"):
-        _ = requests._decode_content_encoding("hello", "br")
+        _ = requests._decode_content_encoding("hello", "compress")
 
 
 fn test_decode_content_encoding_respects_decompressed_limit() raises:
@@ -310,7 +326,16 @@ fn test_retry_after_delay_ms_parses_delta_seconds() raises:
 fn test_retry_after_delay_ms_invalid_or_http_date_returns_zero() raises:
     var headers = Dict[String, String]()
     headers["Retry-After"] = "Wed, 21 Oct 2015 07:28:00 GMT"
-    assert_equal(requests._retry_after_delay_ms(headers), 0)
+    assert_equal(
+        requests._retry_after_delay_ms_with_now(headers, now_epoch_seconds=0),
+        300_000,
+    )
+    assert_equal(
+        requests._retry_after_delay_ms_with_now(
+            headers, now_epoch_seconds=1_760_000_000
+        ),
+        0,
+    )
 
     headers["Retry-After"] = "oops"
     assert_equal(requests._retry_after_delay_ms(headers), 0)
@@ -320,6 +345,24 @@ fn test_retry_after_delay_ms_clamps_large_values() raises:
     var headers = Dict[String, String]()
     headers["Retry-After"] = "999999"
     assert_equal(requests._retry_after_delay_ms(headers), 300_000)
+
+
+fn test_retry_after_delay_ms_http_date_future() raises:
+    var headers = Dict[String, String]()
+    headers["Retry-After"] = "Thu, 01 Jan 1970 00:00:10 GMT"
+    assert_equal(
+        requests._retry_after_delay_ms_with_now(headers, now_epoch_seconds=0),
+        10_000,
+    )
+
+
+fn test_retry_after_delay_ms_http_date_past() raises:
+    var headers = Dict[String, String]()
+    headers["Retry-After"] = "Thu, 01 Jan 1970 00:00:10 GMT"
+    assert_equal(
+        requests._retry_after_delay_ms_with_now(headers, now_epoch_seconds=20),
+        0,
+    )
 
 
 fn test_retry_delay_for_response_ms_respects_retry_after() raises:
@@ -435,6 +478,24 @@ fn test_classify_request_error_kind_size_limit_error() raises:
     )
 
 
+fn test_stale_reused_connection_error_includes_tls_io_failures() raises:
+    assert_true(
+        requests._is_stale_reused_connection_error(
+            "SSL_write failed: ssl_error=5, openssl=none"
+        )
+    )
+    assert_true(
+        requests._is_stale_reused_connection_error(
+            "SSL_read failed: ssl_error=6, openssl=none"
+        )
+    )
+    assert_true(
+        not requests._is_stale_reused_connection_error(
+            "TLS certificate verification failed: code=18"
+        )
+    )
+
+
 fn test_request_safe_size_limit_validation() raises:
     var result = requests.get_safe("https://example.com/", max_header_bytes=0)
     assert_true(not result.ok)
@@ -454,6 +515,46 @@ fn test_request_safe_size_limit_validation() raises:
     assert_true(
         result_3.error_message.find("max_decompressed_bytes must be > 0") != -1
     )
+
+
+fn test_client_get_safe_invalid_url_returns_typed_error() raises:
+    var client = requests.Client()
+    var result = client.get_safe("https://[::1]/")
+    client.close()
+    assert_true(not result.ok)
+    assert_equal(result.error_kind, "invalid_request")
+    assert_true(not result.error_retryable)
+
+
+fn test_client_get_safe_timeout_validation() raises:
+    var client = requests.Client()
+    var result = client.get_safe("https://example.com/", timeout_ms=0)
+    client.close()
+    assert_true(not result.ok)
+    assert_equal(result.error_kind, "invalid_request")
+    assert_true(result.error_message.find("timeout_ms must be > 0") != -1)
+
+
+fn test_client_constructor_pool_option_validation() raises:
+    try:
+        _ = requests.Client(max_idle_connections=-1)
+        assert_true(False)
+    except e:
+        assert_true(String(e).find("max_idle_connections must be >= 0") != -1)
+
+    try:
+        _ = requests.Client(idle_ttl_ms=-1)
+        assert_true(False)
+    except e:
+        assert_true(String(e).find("idle_ttl_ms must be >= 0") != -1)
+
+    try:
+        _ = requests.Client(max_requests_per_connection=0)
+        assert_true(False)
+    except e:
+        assert_true(
+            String(e).find("max_requests_per_connection must be > 0") != -1
+        )
 
 
 fn main() raises:

@@ -8,8 +8,10 @@ Pure Mojo HTTP/HTTPS request library with retries, redirects, compression decodi
 - Redirect following (`301`, `302`, `303`, `307`, `308`)
 - Retry policy with exponential backoff + jitter
 - Idempotent-method retry safety by default (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`)
-- `Retry-After` support for `429`/`503` (delta-seconds format)
+- `Retry-After` support for `429`/`503` (delta-seconds and HTTP-date)
 - `gzip` and `deflate` response decoding
+- Optional Brotli (`br`) response decoding when `libbrotlidec` is available
+- Optional keep-alive connection pooling via `Client` (HTTP and HTTPS)
 - Response size guards:
   - `max_header_bytes`
   - `max_body_bytes`
@@ -58,6 +60,26 @@ fn main() raises:
 - `get_safe(...) -> RequestResult`
 - `post(...) raises -> Response`
 - `post_safe(...) -> RequestResult`
+- `Client(...).request/get/post` and `Client(...).request_safe/get_safe/post_safe`
+
+### Connection Pooling
+
+`Client` can pool both HTTP and HTTPS keep-alive connections.
+
+```mojo
+import requests
+
+fn main() raises:
+    var client = requests.Client(enable_http_pool=True, enable_tls_pool=True)
+    var a = client.get("http://127.0.0.1:18080/pool-probe")
+    var b = client.get("http://127.0.0.1:18080/pool-probe")
+    print(a.headers["X-Connection-Request"])  # 1
+    print(b.headers["X-Connection-Request"])  # 2 (same TCP connection reused)
+    var c = client.get("https://example.com/")
+    var d = client.get("https://example.com/")
+    print(c.status_code, d.status_code)
+    client.close()
+```
 
 Common options:
 
@@ -70,6 +92,9 @@ Common options:
 - `max_header_bytes`
 - `max_body_bytes`
 - `max_decompressed_bytes`
+- `max_idle_connections` (`Client`): max idle pooled sockets kept
+- `idle_ttl_ms` (`Client`): idle lifetime before pooled socket expires
+- `max_requests_per_connection` (`Client`): hard cap before pooled socket rotation
 
 ## Error Kinds
 
@@ -95,7 +120,7 @@ Run deterministic unit tests:
 pixi run test
 ```
 
-Run deterministic local integration tests (starts local mock server automatically):
+Run deterministic local integration tests (starts local HTTP and HTTPS mock servers automatically):
 
 ```bash
 pixi run test-integration

@@ -23,6 +23,36 @@ fn test_live_https_example_com() raises:
     assert_true(response.body.byte_length() > 0)
 
 
+fn test_live_https_client_tls_pool_smoke() raises:
+    if not _run_live_integration():
+        return
+
+    var client = requests.Client(enable_http_pool=False, enable_tls_pool=True)
+    var first = client.get("https://example.com/")
+    var second = client.get("https://example.com/")
+    client.close()
+
+    assert_equal(first.status_code, 200)
+    assert_equal(second.status_code, 200)
+    assert_true(first.body.byte_length() > 0)
+    assert_true(second.body.byte_length() > 0)
+
+
+fn test_live_https_client_tls_pool_disabled_smoke() raises:
+    if not _run_live_integration():
+        return
+
+    var client = requests.Client(enable_http_pool=False, enable_tls_pool=False)
+    var first = client.get("https://example.com/")
+    var second = client.get("https://example.com/")
+    client.close()
+
+    assert_equal(first.status_code, 200)
+    assert_equal(second.status_code, 200)
+    assert_true(first.body.byte_length() > 0)
+    assert_true(second.body.byte_length() > 0)
+
+
 fn test_live_https_httpbin_post() raises:
     if not _run_live_integration():
         return
@@ -52,6 +82,20 @@ fn test_live_https_httpbin_deflate() raises:
     assert_true(
         response.body.find('"deflated": true') != -1
         or response.body.find('"deflated":true') != -1
+    )
+
+
+fn test_live_https_httpbin_brotli() raises:
+    if not _run_live_integration():
+        return
+    if not requests._brotli_available():
+        return
+
+    var response = requests.get("https://httpbin.org/brotli")
+    assert_equal(response.status_code, 200)
+    assert_true(
+        response.body.find('"brotli": true') != -1
+        or response.body.find('"brotli":true') != -1
     )
 
 

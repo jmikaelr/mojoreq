@@ -3,7 +3,7 @@ authors = ["Richard Johnsson <Richard.Johnsson@hotmail.se>"]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "mojoreq"
 platforms = ["osx-arm64", "linux-64"]
-version = "0.1.0"
+version = "0.2.0"
 
 [tasks]
 test = "mojo run -I src tests/requests_test.mojo"

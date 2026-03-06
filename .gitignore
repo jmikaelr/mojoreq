@@ -9,3 +9,10 @@
 
 # codex/session scratch
 **/codex.txt
+
+# mojo build outputs
+/requests
+src/requests
+tests/requests_test
+tests/integration_local_test
+tests/integration_live_test
