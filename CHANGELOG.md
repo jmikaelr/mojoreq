@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Local pooled-vs-non-pooled benchmark runner (`pixi run benchmark`) for HTTP and HTTPS.
+- CI benchmark guard job with configurable regression threshold.
+
 ## [0.2.0] - 2026-03-06
 
 ### Added

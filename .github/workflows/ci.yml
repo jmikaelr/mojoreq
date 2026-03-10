@@ -41,7 +41,9 @@ jobs:
   integration-live:
     name: Live Integration (opt-in)
     runs-on: ubuntu-latest
-    needs: test
+    needs:
+      - test
+      - benchmark
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_live) }}
     steps:
       - name: Checkout
@@ -52,3 +54,21 @@ jobs:
 
       - name: Live Integration Tests
         run: pixi run test-integration-live
+
+  benchmark:
+    name: Pool Benchmark Guard (ubuntu-latest)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.14
+
+      - name: Pool Benchmark Guard
+        env:
+          MOJOREQ_BENCH_ITERATIONS: "25"
+          MOJOREQ_BENCH_ROUNDS: "3"
+          MOJOREQ_BENCH_MAX_REGRESSION_PCT: "25"
+        run: pixi run benchmark

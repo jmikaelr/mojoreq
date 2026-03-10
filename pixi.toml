@@ -10,6 +10,7 @@ test = "mojo run -I src tests/requests_test.mojo"
 test-integration = "tests/run_local_integration.sh"
 test-integration-live = "MOJOREQ_RUN_INTEGRATION_LIVE=1 mojo run -I src tests/integration_live_test.mojo"
 test-live = "MOJOREQ_RUN_INTEGRATION_LIVE=1 mojo run -I src tests/integration_live_test.mojo"
+benchmark = "tests/run_pool_benchmark.sh"
 
 [dependencies]
 mojo = ">=0.26.2.0.dev2026030205,<0.27"

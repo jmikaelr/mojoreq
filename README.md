@@ -132,6 +132,18 @@ Run live internet integration tests (opt-in):
 pixi run test-integration-live
 ```
 
+Run pooled vs non-pooled benchmark guard locally:
+
+```bash
+pixi run benchmark
+```
+
+Benchmark tuning (optional env vars):
+
+- `MOJOREQ_BENCH_ITERATIONS` (default `20`)
+- `MOJOREQ_BENCH_ROUNDS` (default `3`, max `3`)
+- `MOJOREQ_BENCH_MAX_REGRESSION_PCT` (default `25`)
+
 Optional environment variables are documented in [.env.example](.env.example).
 
 ## CI and Releases
