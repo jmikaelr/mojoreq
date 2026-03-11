@@ -446,12 +446,20 @@ struct _ZStream:
     var reserved: c_ulong
 
 
+fn _placeholder_library_handle() raises -> OwnedDLHandle:
+    comptime if CompilationTarget.is_macos():
+        return OwnedDLHandle("libSystem.B.dylib")
+    elif CompilationTarget.is_linux():
+        return OwnedDLHandle("libc.so.6")
+    else:
+        raise Error("unsupported target for shared library placeholder setup")
+
+
 struct _Zlib(Movable):
     var libz: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libz = OwnedDLHandle(unsafe_uninitialized=True)
-
+        self.libz = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var z_fallback_v = String()
         var z_fallback_compat = String()
@@ -487,8 +495,7 @@ struct _Brotli(Movable):
     var libbrotli: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libbrotli = OwnedDLHandle(unsafe_uninitialized=True)
-
+        self.libbrotli = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var brotli_fallback_v = String()
         var brotli_fallback_compat = String()
@@ -533,9 +540,8 @@ struct _OpenSSL(Movable):
     var libcrypto: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libssl = OwnedDLHandle(unsafe_uninitialized=True)
-        self.libcrypto = OwnedDLHandle(unsafe_uninitialized=True)
-
+        self.libssl = _placeholder_library_handle()
+        self.libcrypto = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var ssl_fallback_v = String()
         var ssl_fallback_compat = String()
