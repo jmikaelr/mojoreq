@@ -446,23 +446,15 @@ struct _ZStream:
     var reserved: c_ulong
 
 
-fn _placeholder_library_handle() raises -> OwnedDLHandle:
-    comptime if CompilationTarget.is_macos():
-        return OwnedDLHandle("libSystem.B.dylib")
-    elif CompilationTarget.is_linux():
-        return OwnedDLHandle("libc.so.6")
-    else:
-        raise Error("unsupported target for shared library placeholder setup")
-
-
 struct _Zlib(Movable):
     var libz: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libz = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var z_fallback_v = String()
         var z_fallback_compat = String()
+        var z_primary = String()
+        var z_secondary = String()
         if len(conda_prefix) > 0:
             comptime if CompilationTarget.is_macos():
                 z_fallback_v = String(conda_prefix, "/lib/libz.1.dylib")
@@ -472,33 +464,29 @@ struct _Zlib(Movable):
                 z_fallback_compat = String(conda_prefix, "/lib/libz.so")
 
         comptime if CompilationTarget.is_macos():
-            self.libz = _open_shared_library(
-                "libz.1.dylib",
-                "libz.dylib",
-                z_fallback_v,
-                z_fallback_compat,
-            )
+            z_primary = "libz.1.dylib"
+            z_secondary = "libz.dylib"
         elif CompilationTarget.is_linux():
-            self.libz = _open_shared_library(
-                "libz.so.1",
-                "libz.so",
-                z_fallback_v,
-                z_fallback_compat,
-            )
+            z_primary = "libz.so.1"
+            z_secondary = "libz.so"
         else:
             CompilationTarget.unsupported_target_error[
                 NoneType, operation="gzip/deflate zlib setup"
             ]()
+        self.libz = _open_shared_library(
+            z_primary, z_secondary, z_fallback_v, z_fallback_compat
+        )
 
 
 struct _Brotli(Movable):
     var libbrotli: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libbrotli = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var brotli_fallback_v = String()
         var brotli_fallback_compat = String()
+        var brotli_primary = String()
+        var brotli_secondary = String()
         if len(conda_prefix) > 0:
             comptime if CompilationTarget.is_macos():
                 brotli_fallback_v = String(
@@ -516,23 +504,21 @@ struct _Brotli(Movable):
                 )
 
         comptime if CompilationTarget.is_macos():
-            self.libbrotli = _open_shared_library(
-                "libbrotlidec.1.dylib",
-                "libbrotlidec.dylib",
-                brotli_fallback_v,
-                brotli_fallback_compat,
-            )
+            brotli_primary = "libbrotlidec.1.dylib"
+            brotli_secondary = "libbrotlidec.dylib"
         elif CompilationTarget.is_linux():
-            self.libbrotli = _open_shared_library(
-                "libbrotlidec.so.1",
-                "libbrotlidec.so",
-                brotli_fallback_v,
-                brotli_fallback_compat,
-            )
+            brotli_primary = "libbrotlidec.so.1"
+            brotli_secondary = "libbrotlidec.so"
         else:
             CompilationTarget.unsupported_target_error[
                 NoneType, operation="brotli decode setup"
             ]()
+        self.libbrotli = _open_shared_library(
+            brotli_primary,
+            brotli_secondary,
+            brotli_fallback_v,
+            brotli_fallback_compat,
+        )
 
 
 struct _OpenSSL(Movable):
@@ -540,13 +526,15 @@ struct _OpenSSL(Movable):
     var libcrypto: OwnedDLHandle
 
     fn __init__(out self) raises:
-        self.libssl = _placeholder_library_handle()
-        self.libcrypto = _placeholder_library_handle()
         var conda_prefix = getenv("CONDA_PREFIX")
         var ssl_fallback_v = String()
         var ssl_fallback_compat = String()
         var crypto_fallback_v = String()
         var crypto_fallback_compat = String()
+        var ssl_primary = String()
+        var ssl_secondary = String()
+        var crypto_primary = String()
+        var crypto_secondary = String()
         if len(conda_prefix) > 0:
             comptime if CompilationTarget.is_macos():
                 ssl_fallback_v = String(conda_prefix, "/lib/libssl.3.dylib")
@@ -566,35 +554,28 @@ struct _OpenSSL(Movable):
                 )
 
         comptime if CompilationTarget.is_macos():
-            self.libssl = _open_shared_library(
-                "libssl.3.dylib",
-                "libssl.dylib",
-                ssl_fallback_v,
-                ssl_fallback_compat,
-            )
-            self.libcrypto = _open_shared_library(
-                "libcrypto.3.dylib",
-                "libcrypto.dylib",
-                crypto_fallback_v,
-                crypto_fallback_compat,
-            )
+            ssl_primary = "libssl.3.dylib"
+            ssl_secondary = "libssl.dylib"
+            crypto_primary = "libcrypto.3.dylib"
+            crypto_secondary = "libcrypto.dylib"
         elif CompilationTarget.is_linux():
-            self.libssl = _open_shared_library(
-                "libssl.so.3",
-                "libssl.so",
-                ssl_fallback_v,
-                ssl_fallback_compat,
-            )
-            self.libcrypto = _open_shared_library(
-                "libcrypto.so.3",
-                "libcrypto.so",
-                crypto_fallback_v,
-                crypto_fallback_compat,
-            )
+            ssl_primary = "libssl.so.3"
+            ssl_secondary = "libssl.so"
+            crypto_primary = "libcrypto.so.3"
+            crypto_secondary = "libcrypto.so"
         else:
             CompilationTarget.unsupported_target_error[
                 NoneType, operation="HTTPS/OpenSSL setup"
             ]()
+        self.libssl = _open_shared_library(
+            ssl_primary, ssl_secondary, ssl_fallback_v, ssl_fallback_compat
+        )
+        self.libcrypto = _open_shared_library(
+            crypto_primary,
+            crypto_secondary,
+            crypto_fallback_v,
+            crypto_fallback_compat,
+        )
 
     fn last_error(self) -> String:
         var err_code = self.libcrypto.call[
