@@ -27,15 +27,26 @@ Pure Mojo HTTP/HTTPS request library with retries, redirects, compression decodi
 
 ```mojo
 import requests
+from std.collections import Dict
 
 fn main() raises:
+    var params = Dict[String, String]()
+    params["q"] = "mojo requests"
+
     var response = requests.get(
-        "https://example.com/",
+        "https://example.com/search",
+        params=params^,
         timeout_ms=10_000,
-        max_redirects=5,
     )
     print(response.status_code)
     print(response.text())
+
+    var created = requests.post(
+        "https://httpbin.org/post",
+        json='{"hello":"mojo"}',
+        timeout_ms=10_000,
+    )
+    print(created.status_code)
 
     var safe = requests.get_safe("https://[::1]/")
     if not safe.ok:
@@ -54,12 +65,12 @@ fn main() raises:
 
 ### Main Functions
 
-- `request(...) raises -> Response`
-- `request_safe(...) -> RequestResult`
-- `get(...) raises -> Response`
-- `get_safe(...) -> RequestResult`
-- `post(...) raises -> Response`
-- `post_safe(...) -> RequestResult`
+- `request(req, ...)` and `request(method, url, ...)`
+- `request_safe(req, ...)` and `request_safe(method, url, ...)`
+- `get(url, ..., headers=..., params=...)`
+- `get_safe(url, ..., headers=..., params=...)`
+- `post(url, ..., body=..., data=..., json=..., headers=..., params=...)`
+- `post_safe(url, ..., body=..., data=..., json=..., headers=..., params=...)`
 - `Client(...).request/get/post` and `Client(...).request_safe/get_safe/post_safe`
 
 ### Connection Pooling
@@ -83,6 +94,10 @@ fn main() raises:
 
 Common options:
 
+- `headers` (`Dict[String, String]`)
+- `params` (`Dict[String, String]`) appends URL query parameters with percent-encoding
+- `data` (`Dict[String, String]`) encodes body as `application/x-www-form-urlencoded`
+- `json` (`String`) sends JSON body and sets `Content-Type: application/json` by default
 - `timeout_ms`
 - `max_redirects`
 - `max_retries`

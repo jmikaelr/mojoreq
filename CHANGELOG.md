@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file.
 - Local pooled-vs-non-pooled benchmark runner (`pixi run benchmark`) for HTTP and HTTPS.
 - CI benchmark guard job with configurable regression threshold.
 - README smoke test task (`pixi run test-smoke`) and CI/release verification step.
+- Python-requests-style convenience arguments: `params`, `headers`, `data`, and `json`, plus `request(method, url, ...)` overloads.
 
 ## [0.2.0] - 2026-03-06
 

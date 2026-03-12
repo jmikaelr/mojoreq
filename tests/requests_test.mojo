@@ -38,6 +38,81 @@ fn test_parse_url_rejects_ipv6_literal() raises:
         _ = requests._parse_url("https://[::1]/")
 
 
+fn test_append_query_params_encodes_and_appends() raises:
+    var params = Dict[String, String]()
+    params["q"] = "mojo requests"
+    params["page"] = "1"
+
+    var url = requests._append_query_params("https://example.com/search", params)
+    assert_true(url.startswith("https://example.com/search?"))
+    assert_true(url.find("q=mojo%20requests") != -1)
+    assert_true(url.find("page=1") != -1)
+
+
+fn test_append_query_params_existing_query_uses_ampersand() raises:
+    var params = Dict[String, String]()
+    params["lang"] = "mojo"
+    var url = requests._append_query_params(
+        "https://example.com/search?x=1", params
+    )
+    assert_true(url.find("?x=1&") != -1)
+    assert_true(url.find("lang=mojo") != -1)
+
+
+fn test_prepare_request_input_data_sets_form_content_type() raises:
+    var data = Dict[String, String]()
+    data["name"] = "mojo lang"
+    var prepared = requests._prepare_request_input(
+        "https://example.com/form",
+        Dict[String, String](),
+        "",
+        Dict[String, String](),
+        data,
+        "",
+    )
+    assert_true(prepared.body.find("name=mojo%20lang") != -1)
+    assert_equal(
+        prepared.headers["Content-Type"], "application/x-www-form-urlencoded"
+    )
+
+
+fn test_prepare_request_input_json_sets_default_content_type() raises:
+    var prepared = requests._prepare_request_input(
+        "https://example.com/json",
+        Dict[String, String](),
+        "",
+        Dict[String, String](),
+        Dict[String, String](),
+        '{"hello":"world"}',
+    )
+    assert_equal(prepared.body, '{"hello":"world"}')
+    assert_equal(prepared.headers["Content-Type"], "application/json")
+
+
+fn test_prepare_request_input_conflicting_body_sources_raise() raises:
+    var data = Dict[String, String]()
+    data["x"] = "1"
+    with assert_raises(contains="mutually exclusive"):
+        _ = requests._prepare_request_input(
+            "https://example.com/",
+            Dict[String, String](),
+            "raw",
+            Dict[String, String](),
+            data,
+            "",
+        )
+
+    with assert_raises(contains="mutually exclusive"):
+        _ = requests._prepare_request_input(
+            "https://example.com/",
+            Dict[String, String](),
+            "",
+            Dict[String, String](),
+            data,
+            '{"x":1}',
+        )
+
+
 fn test_resolve_redirect_url_absolute() raises:
     var parsed = requests._parse_url("https://example.com/path")
     var url = requests._resolve_redirect_url(
@@ -461,6 +536,20 @@ fn test_request_safe_retry_backoff_validation() raises:
         )
         != -1
     )
+
+
+fn test_request_safe_method_overload_conflicting_body_data_is_invalid() raises:
+    var data = Dict[String, String]()
+    data["x"] = "1"
+    var result = requests.request_safe(
+        "POST",
+        "https://example.com/",
+        body="raw",
+        data=data,
+    )
+    assert_true(not result.ok)
+    assert_equal(result.error_kind, "invalid_request")
+    assert_true(result.error_message.find("mutually exclusive") != -1)
 
 
 fn test_classify_request_error_kind_size_limit_error() raises:

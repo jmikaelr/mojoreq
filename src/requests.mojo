@@ -147,6 +147,13 @@ struct _TLSPoolTakeResult:
     var request_count: Int
 
 
+@fieldwise_init
+struct _PreparedRequestInput:
+    var url: String
+    var headers: Dict[String, String]
+    var body: String
+
+
 struct Client(Movable):
     var enable_http_pool: Bool
     var enable_tls_pool: Bool
@@ -233,6 +240,51 @@ struct Client(Movable):
             max_decompressed_bytes=max_decompressed_bytes,
         )
 
+    fn request(
+        mut self,
+        method: String,
+        url: String,
+        headers: Dict[String, String] = Dict[String, String](),
+        body: String = "",
+        params: Dict[String, String] = Dict[String, String](),
+        data: Dict[String, String] = Dict[String, String](),
+        json: String = "",
+        timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
+        max_redirects: Int = _DEFAULT_MAX_REDIRECTS,
+        max_retries: Int = _DEFAULT_MAX_RETRIES,
+        retry_backoff_ms: Int = _DEFAULT_RETRY_BACKOFF_MS,
+        retry_max_backoff_ms: Int = _DEFAULT_RETRY_MAX_BACKOFF_MS,
+        retry_non_idempotent: Bool = False,
+        max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
+        max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
+        max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    ) raises -> Response:
+        var prepared = _prepare_request_input(
+            url,
+            headers,
+            body,
+            params,
+            data,
+            json,
+        )
+        return self.request(
+            Request(
+                method=method,
+                url=prepared.url,
+                headers=prepared.headers.copy(),
+                body=prepared.body,
+            ),
+            timeout_ms=timeout_ms,
+            max_redirects=max_redirects,
+            max_retries=max_retries,
+            retry_backoff_ms=retry_backoff_ms,
+            retry_max_backoff_ms=retry_max_backoff_ms,
+            retry_non_idempotent=retry_non_idempotent,
+            max_header_bytes=max_header_bytes,
+            max_body_bytes=max_body_bytes,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
+
     fn request_safe(
         mut self,
         req: Request,
@@ -260,6 +312,64 @@ struct Client(Movable):
             max_decompressed_bytes=max_decompressed_bytes,
         )
 
+    fn request_safe(
+        mut self,
+        method: String,
+        url: String,
+        headers: Dict[String, String] = Dict[String, String](),
+        body: String = "",
+        params: Dict[String, String] = Dict[String, String](),
+        data: Dict[String, String] = Dict[String, String](),
+        json: String = "",
+        timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
+        max_redirects: Int = _DEFAULT_MAX_REDIRECTS,
+        max_retries: Int = _DEFAULT_MAX_RETRIES,
+        retry_backoff_ms: Int = _DEFAULT_RETRY_BACKOFF_MS,
+        retry_max_backoff_ms: Int = _DEFAULT_RETRY_MAX_BACKOFF_MS,
+        retry_non_idempotent: Bool = False,
+        max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
+        max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
+        max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    ) -> RequestResult:
+        try:
+            var prepared = _prepare_request_input(
+                url,
+                headers,
+                body,
+                params,
+                data,
+                json,
+            )
+            return self.request_safe(
+                Request(
+                    method=method,
+                    url=prepared.url,
+                    headers=prepared.headers.copy(),
+                    body=prepared.body,
+                ),
+                timeout_ms=timeout_ms,
+                max_redirects=max_redirects,
+                max_retries=max_retries,
+                retry_backoff_ms=retry_backoff_ms,
+                retry_max_backoff_ms=retry_max_backoff_ms,
+                retry_non_idempotent=retry_non_idempotent,
+                max_header_bytes=max_header_bytes,
+                max_body_bytes=max_body_bytes,
+                max_decompressed_bytes=max_decompressed_bytes,
+            )
+        except e:
+            var message = String(e)
+            var kind = _classify_request_error_kind(message)
+            return RequestResult(
+                ok=False,
+                status_code=0,
+                headers=Dict[String, String](),
+                body="",
+                error_kind=kind,
+                error_message=message,
+                error_retryable=_is_retryable_error_kind(kind),
+            )
+
     fn get(
         mut self,
         url: String,
@@ -271,14 +381,14 @@ struct Client(Movable):
         max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
         max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
         max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+        headers: Dict[String, String] = Dict[String, String](),
+        params: Dict[String, String] = Dict[String, String](),
     ) raises -> Response:
         return self.request(
-            Request(
-                method="GET",
-                url=url,
-                headers=Dict[String, String](),
-                body="",
-            ),
+            "GET",
+            url,
+            headers=headers,
+            params=params,
             timeout_ms=timeout_ms,
             max_redirects=max_redirects,
             max_retries=max_retries,
@@ -300,14 +410,14 @@ struct Client(Movable):
         max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
         max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
         max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+        headers: Dict[String, String] = Dict[String, String](),
+        params: Dict[String, String] = Dict[String, String](),
     ) -> RequestResult:
         return self.request_safe(
-            Request(
-                method="GET",
-                url=url,
-                headers=Dict[String, String](),
-                body="",
-            ),
+            "GET",
+            url,
+            headers=headers,
+            params=params,
             timeout_ms=timeout_ms,
             max_redirects=max_redirects,
             max_retries=max_retries,
@@ -331,14 +441,19 @@ struct Client(Movable):
         max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
         max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
         max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+        headers: Dict[String, String] = Dict[String, String](),
+        params: Dict[String, String] = Dict[String, String](),
+        data: Dict[String, String] = Dict[String, String](),
+        json: String = "",
     ) raises -> Response:
         return self.request(
-            Request(
-                method="POST",
-                url=url,
-                headers=Dict[String, String](),
-                body=body,
-            ),
+            "POST",
+            url,
+            body=body,
+            headers=headers,
+            params=params,
+            data=data,
+            json=json,
             timeout_ms=timeout_ms,
             max_redirects=max_redirects,
             max_retries=max_retries,
@@ -363,14 +478,19 @@ struct Client(Movable):
         max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
         max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
         max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+        headers: Dict[String, String] = Dict[String, String](),
+        params: Dict[String, String] = Dict[String, String](),
+        data: Dict[String, String] = Dict[String, String](),
+        json: String = "",
     ) -> RequestResult:
         return self.request_safe(
-            Request(
-                method="POST",
-                url=url,
-                headers=Dict[String, String](),
-                body=body,
-            ),
+            "POST",
+            url,
+            body=body,
+            headers=headers,
+            params=params,
+            data=data,
+            json=json,
             timeout_ms=timeout_ms,
             max_redirects=max_redirects,
             max_retries=max_retries,
@@ -655,6 +775,105 @@ fn _set_default_header(
         headers[name] = value
 
 
+fn _is_unreserved_url_byte(byte: UInt8) -> Bool:
+    return (
+        (byte >= UInt8(ord("A")) and byte <= UInt8(ord("Z")))
+        or (byte >= UInt8(ord("a")) and byte <= UInt8(ord("z")))
+        or (byte >= UInt8(ord("0")) and byte <= UInt8(ord("9")))
+        or byte == UInt8(ord("-"))
+        or byte == UInt8(ord("."))
+        or byte == UInt8(ord("_"))
+        or byte == UInt8(ord("~"))
+    )
+
+
+fn _hex_digit_upper(nibble: UInt8) -> UInt8:
+    if nibble < UInt8(10):
+        return UInt8(ord("0")) + nibble
+    return UInt8(ord("A")) + (nibble - UInt8(10))
+
+
+fn _percent_encode_url_component(value: StringSlice) -> String:
+    var encoded = String()
+    var source = String(value)
+    for byte in source.as_bytes():
+        if _is_unreserved_url_byte(byte):
+            encoded._unsafe_append_byte(byte)
+            continue
+        encoded._unsafe_append_byte(UInt8(ord("%")))
+        encoded._unsafe_append_byte(_hex_digit_upper((byte >> 4) & UInt8(0x0F)))
+        encoded._unsafe_append_byte(_hex_digit_upper(byte & UInt8(0x0F)))
+    return encoded^
+
+
+fn _encode_key_value_pairs(values: Dict[String, String]) -> String:
+    if len(values) == 0:
+        return ""
+
+    var encoded = String()
+    var first = True
+    for item in values.items():
+        if not first:
+            encoded._unsafe_append_byte(UInt8(ord("&")))
+        encoded += _percent_encode_url_component(item.key)
+        encoded._unsafe_append_byte(UInt8(ord("=")))
+        encoded += _percent_encode_url_component(item.value)
+        first = False
+    return encoded^
+
+
+fn _append_query_params(url: StringSlice, params: Dict[String, String]) -> String:
+    if len(params) == 0:
+        return String(url)
+
+    var encoded_params = _encode_key_value_pairs(params)
+    var base_url = String(url)
+    if len(encoded_params) == 0:
+        return base_url
+
+    if base_url.find("?") == -1:
+        return String(base_url, "?", encoded_params)
+    if base_url.endswith("?") or base_url.endswith("&"):
+        return String(base_url, encoded_params)
+    return String(base_url, "&", encoded_params)
+
+
+fn _prepare_request_input(
+    url: StringSlice,
+    headers: Dict[String, String],
+    body: StringSlice,
+    params: Dict[String, String],
+    data: Dict[String, String],
+    json: StringSlice,
+) raises -> _PreparedRequestInput:
+    if len(body) > 0 and len(data) > 0:
+        raise Error("body and data are mutually exclusive")
+    if len(body) > 0 and len(json) > 0:
+        raise Error("body and json are mutually exclusive")
+    if len(data) > 0 and len(json) > 0:
+        raise Error("data and json are mutually exclusive")
+
+    var final_headers = headers.copy()
+    var final_body = String(body)
+
+    if len(data) > 0:
+        final_body = _encode_key_value_pairs(data)
+        _set_default_header(
+            final_headers,
+            "Content-Type",
+            "application/x-www-form-urlencoded",
+        )
+    elif len(json) > 0:
+        final_body = String(json)
+        _set_default_header(final_headers, "Content-Type", "application/json")
+
+    return _PreparedRequestInput(
+        url=_append_query_params(url, params),
+        headers=final_headers^,
+        body=final_body,
+    )
+
+
 fn _string_from_bytes(bytes: List[UInt8]) -> String:
     var result = String(capacity=len(bytes))
     for b in bytes:
@@ -859,6 +1078,7 @@ fn _classify_request_error_kind(message: StringSlice) -> String:
         or lower.find("max_header_bytes must be > 0") != -1
         or lower.find("max_body_bytes must be > 0") != -1
         or lower.find("max_decompressed_bytes must be > 0") != -1
+        or lower.find("mutually exclusive") != -1
     ):
         return "invalid_request"
     if (
@@ -3309,6 +3529,51 @@ fn request(
     )
 
 
+fn request(
+    method: String,
+    url: String,
+    headers: Dict[String, String] = Dict[String, String](),
+    body: String = "",
+    params: Dict[String, String] = Dict[String, String](),
+    data: Dict[String, String] = Dict[String, String](),
+    json: String = "",
+    timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
+    max_redirects: Int = _DEFAULT_MAX_REDIRECTS,
+    max_retries: Int = _DEFAULT_MAX_RETRIES,
+    retry_backoff_ms: Int = _DEFAULT_RETRY_BACKOFF_MS,
+    retry_max_backoff_ms: Int = _DEFAULT_RETRY_MAX_BACKOFF_MS,
+    retry_non_idempotent: Bool = False,
+    max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
+    max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
+    max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+) raises -> Response:
+    var prepared = _prepare_request_input(
+        url,
+        headers,
+        body,
+        params,
+        data,
+        json,
+    )
+    return request(
+        Request(
+            method=method,
+            url=prepared.url,
+            headers=prepared.headers.copy(),
+            body=prepared.body,
+        ),
+        timeout_ms=timeout_ms,
+        max_redirects=max_redirects,
+        max_retries=max_retries,
+        retry_backoff_ms=retry_backoff_ms,
+        retry_max_backoff_ms=retry_max_backoff_ms,
+        retry_non_idempotent=retry_non_idempotent,
+        max_header_bytes=max_header_bytes,
+        max_body_bytes=max_body_bytes,
+        max_decompressed_bytes=max_decompressed_bytes,
+    )
+
+
 fn request_safe(
     req: Request,
     timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
@@ -3350,6 +3615,64 @@ fn request_safe(
         )
 
 
+fn request_safe(
+    method: String,
+    url: String,
+    headers: Dict[String, String] = Dict[String, String](),
+    body: String = "",
+    params: Dict[String, String] = Dict[String, String](),
+    data: Dict[String, String] = Dict[String, String](),
+    json: String = "",
+    timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
+    max_redirects: Int = _DEFAULT_MAX_REDIRECTS,
+    max_retries: Int = _DEFAULT_MAX_RETRIES,
+    retry_backoff_ms: Int = _DEFAULT_RETRY_BACKOFF_MS,
+    retry_max_backoff_ms: Int = _DEFAULT_RETRY_MAX_BACKOFF_MS,
+    retry_non_idempotent: Bool = False,
+    max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
+    max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
+    max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+) -> RequestResult:
+    try:
+        var prepared = _prepare_request_input(
+            url,
+            headers,
+            body,
+            params,
+            data,
+            json,
+        )
+        return request_safe(
+            Request(
+                method=method,
+                url=prepared.url,
+                headers=prepared.headers.copy(),
+                body=prepared.body,
+            ),
+            timeout_ms=timeout_ms,
+            max_redirects=max_redirects,
+            max_retries=max_retries,
+            retry_backoff_ms=retry_backoff_ms,
+            retry_max_backoff_ms=retry_max_backoff_ms,
+            retry_non_idempotent=retry_non_idempotent,
+            max_header_bytes=max_header_bytes,
+            max_body_bytes=max_body_bytes,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
+    except e:
+        var message = String(e)
+        var kind = _classify_request_error_kind(message)
+        return RequestResult(
+            ok=False,
+            status_code=0,
+            headers=Dict[String, String](),
+            body="",
+            error_kind=kind,
+            error_message=message,
+            error_retryable=_is_retryable_error_kind(kind),
+        )
+
+
 fn get(
     url: String,
     timeout_ms: Int = _DEFAULT_TIMEOUT_MS,
@@ -3360,14 +3683,14 @@ fn get(
     max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
     max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
     max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    headers: Dict[String, String] = Dict[String, String](),
+    params: Dict[String, String] = Dict[String, String](),
 ) raises -> Response:
     return request(
-        Request(
-            method="GET",
-            url=url,
-            headers=Dict[String, String](),
-            body="",
-        ),
+        "GET",
+        url,
+        headers=headers,
+        params=params,
         timeout_ms=timeout_ms,
         max_redirects=max_redirects,
         max_retries=max_retries,
@@ -3389,14 +3712,14 @@ fn get_safe(
     max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
     max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
     max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    headers: Dict[String, String] = Dict[String, String](),
+    params: Dict[String, String] = Dict[String, String](),
 ) -> RequestResult:
     return request_safe(
-        Request(
-            method="GET",
-            url=url,
-            headers=Dict[String, String](),
-            body="",
-        ),
+        "GET",
+        url,
+        headers=headers,
+        params=params,
         timeout_ms=timeout_ms,
         max_redirects=max_redirects,
         max_retries=max_retries,
@@ -3420,14 +3743,19 @@ fn post(
     max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
     max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
     max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    headers: Dict[String, String] = Dict[String, String](),
+    params: Dict[String, String] = Dict[String, String](),
+    data: Dict[String, String] = Dict[String, String](),
+    json: String = "",
 ) raises -> Response:
     return request(
-        Request(
-            method="POST",
-            url=url,
-            headers=Dict[String, String](),
-            body=body,
-        ),
+        "POST",
+        url,
+        headers=headers,
+        body=body,
+        params=params,
+        data=data,
+        json=json,
         timeout_ms=timeout_ms,
         max_redirects=max_redirects,
         max_retries=max_retries,
@@ -3452,14 +3780,19 @@ fn post_safe(
     max_header_bytes: Int = _DEFAULT_MAX_HEADER_BYTES,
     max_body_bytes: Int = _DEFAULT_MAX_BODY_BYTES,
     max_decompressed_bytes: Int = _DEFAULT_MAX_DECOMPRESSED_BYTES,
+    headers: Dict[String, String] = Dict[String, String](),
+    params: Dict[String, String] = Dict[String, String](),
+    data: Dict[String, String] = Dict[String, String](),
+    json: String = "",
 ) -> RequestResult:
     return request_safe(
-        Request(
-            method="POST",
-            url=url,
-            headers=Dict[String, String](),
-            body=body,
-        ),
+        "POST",
+        url,
+        headers=headers,
+        body=body,
+        params=params,
+        data=data,
+        json=json,
         timeout_ms=timeout_ms,
         max_redirects=max_redirects,
         max_retries=max_retries,
@@ -3475,9 +3808,13 @@ fn post_safe(
 fn main():
     print("mojoreq sample:")
 
+    var params = Dict[String, String]()
+    params["q"] = "mojo requests"
+
     try:
         var response = get(
-            "http://example.com/",
+            "https://example.com/search",
+            params=params^,
             timeout_ms=10_000,
             max_redirects=5,
         )
@@ -3489,11 +3826,19 @@ fn main():
 
     try:
         var post_response = post(
-            "https://httpbin.org/post", '{"hello":"mojo"}', timeout_ms=10_000
+            "https://httpbin.org/post",
+            json='{"hello":"mojo"}',
+            timeout_ms=10_000,
         )
         print("POST status:", post_response.status_code)
     except e:
         print("POST failed:", String(e))
+
+    try:
+        var custom = request("GET", "https://example.com/", timeout_ms=10_000)
+        print("Custom request status:", custom.status_code)
+    except e:
+        print("Custom request failed:", String(e))
 
     var safe_result = get_safe("https://[::1]/", timeout_ms=3_000)
     if safe_result.ok:

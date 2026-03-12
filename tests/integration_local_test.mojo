@@ -31,6 +31,24 @@ fn test_local_get_ok() raises:
     assert_true(response.body.find('"source":"mock"') != -1)
 
 
+fn test_local_get_with_params_convenience() raises:
+    if not _run_local_integration():
+        return
+
+    var params = Dict[String, String]()
+    params["key"] = "params_convenience"
+    params["fails"] = "0"
+    params["status"] = "503"
+
+    var response = requests.get(
+        _url("/flaky"),
+        params=params^,
+        max_retries=0,
+    )
+    assert_equal(response.status_code, 200)
+    assert_true(response.body.find('"key":"params_convenience"') != -1)
+
+
 fn test_local_post_echo() raises:
     if not _run_local_integration():
         return
@@ -40,6 +58,39 @@ fn test_local_post_echo() raises:
     )
     assert_equal(response.status_code, 200)
     assert_equal(response.body, '{"ping":1}')
+
+
+fn test_local_post_form_data_convenience() raises:
+    if not _run_local_integration():
+        return
+
+    var data = Dict[String, String]()
+    data["name"] = "mojo lang"
+    data["kind"] = "http"
+
+    var response = requests.post(
+        _url("/post-echo"),
+        data=data^,
+        max_retries=0,
+    )
+    assert_equal(response.status_code, 200)
+    assert_true(response.body.find("name=mojo%20lang") != -1)
+    assert_true(response.body.find("kind=http") != -1)
+    assert_true(response.body.find("&") != -1)
+
+
+fn test_local_post_json_convenience() raises:
+    if not _run_local_integration():
+        return
+
+    var payload = '{"hello":"world"}'
+    var response = requests.post(
+        _url("/post-echo"),
+        json=payload,
+        max_retries=0,
+    )
+    assert_equal(response.status_code, 200)
+    assert_equal(response.body, payload)
 
 
 fn test_local_redirect_follow() raises:
