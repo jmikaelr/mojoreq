@@ -7,6 +7,7 @@ version = "0.2.0"
 
 [tasks]
 test = "mojo run -I src tests/requests_test.mojo"
+test-smoke = "tests/run_readme_smoke.sh"
 test-integration = "tests/run_local_integration.sh"
 test-integration-live = "MOJOREQ_RUN_INTEGRATION_LIVE=1 mojo run -I src tests/integration_live_test.mojo"
 test-live = "MOJOREQ_RUN_INTEGRATION_LIVE=1 mojo run -I src tests/integration_live_test.mojo"

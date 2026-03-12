@@ -35,6 +35,9 @@ jobs:
       - name: Unit Tests
         run: pixi run test
 
+      - name: README Smoke Test
+        run: pixi run test-smoke
+
       - name: Local Integration Tests
         run: pixi run test-integration
 

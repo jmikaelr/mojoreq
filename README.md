@@ -120,6 +120,12 @@ Run deterministic unit tests:
 pixi run test
 ```
 
+Run README quick-start smoke test from a clean temp directory:
+
+```bash
+pixi run test-smoke
+```
+
 Run deterministic local integration tests (starts local HTTP and HTTPS mock servers automatically):
 
 ```bash
@@ -148,7 +154,7 @@ Optional environment variables are documented in [.env.example](.env.example).
 
 ## CI and Releases
 
-- CI workflow runs unit + local integration tests on Linux and macOS.
+- CI workflow runs unit + README smoke + local integration tests on Linux and macOS.
 - Live internet integration is in a separate gated job.
 - Tagging `v*` (for example `v0.1.0`) triggers the release workflow.
 
