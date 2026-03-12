@@ -3,6 +3,7 @@ import argparse
 import base64
 import gzip
 import json
+import socket
 import ssl
 import threading
 import urllib.parse
@@ -48,6 +49,13 @@ class MockHandler(BaseHTTPRequestHandler):
 
     def setup(self):
         super().setup()
+        # Avoid tiny-packet Nagle delays on keep-alive benchmark traffic.
+        try:
+            self.connection.setsockopt(
+                socket.IPPROTO_TCP, socket.TCP_NODELAY, 1
+            )
+        except OSError:
+            pass
         global _NEXT_CONNECTION_ID
         socket_key = id(self.connection)
         with _CONNECTION_LOCK:
